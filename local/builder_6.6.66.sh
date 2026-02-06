@@ -168,13 +168,13 @@ if [[ "$KSU_BRANCH" == "y" || "$KSU_BRANCH" == "Y" ]]; then
   echo ">>> Version Code: ${KSU_VERSION_CODE}"
 elif [[ "$KSU_BRANCH" == "r" || "$KSU_BRANCH" == "R" ]]; then
   echo ">>> 拉取 ReSukiSU 并设置版本..."
-  curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s builtin
+  curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s main
   cd KernelSU
   GIT_COMMIT_HASH=$(git rev-parse --short=8 HEAD)
   echo "当前提交哈希: $GIT_COMMIT_HASH"
   echo ">>> 正在获取上游 API 版本信息..."
   for i in {1..3}; do
-      KSU_API_VERSION=$(curl -s "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/builtin/kernel/Kbuild" | \
+      KSU_API_VERSION=$(curl -s "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/Kbuild" | \
           grep -m1 "KSU_VERSION_API :=" | \
           awk -F'= ' '{print $2}' | \
           tr -d '[:space:]')
@@ -326,6 +326,7 @@ elif [[ "$KSU_BRANCH" == [kK] && "$APPLY_SUSFS" == [yY] ]]; then
   patch -p1 -N -F 3 < 69_hide_stuff.patch || true
 else
   echo ">>> 未开启susfs，跳过susfs补丁配置..."
+  cd common
 fi
 cd ../
 
@@ -482,32 +483,10 @@ fi
 if [[ "$APPLY_BBG" == "y" || "$APPLY_BBG" == "Y" ]]; then
   echo ">>> 正在启用内核级基带保护..."
   echo "CONFIG_BBG=y" >> "$DEFCONFIG_FILE"
-  cd ./common/security
-  wget https://github.com/cctv18/Baseband-guard/archive/refs/heads/master.zip
-  unzip -q master.zip
-  mv "Baseband-guard-master" baseband-guard
-  printf '\nobj-$(CONFIG_BBG) += baseband-guard/\n' >> ./Makefile
-  sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/lockdown/lockdown,baseband_guard/ } }' ./Kconfig
-  awk '
-  /endmenu/ { last_endmenu_line = NR }
-  { lines[NR] = $0 }
-  END {
-    for (i=1; i<=NR; i++) {
-      if (i == last_endmenu_line) {
-        sub(/endmenu/, "", lines[i]);
-        print lines[i] "source \"security/baseband-guard/Kconfig\""
-        print ""
-        print "endmenu"
-      } else {
-          print lines[i]
-      }
-    }
-  }
-  ' ./Kconfig > Kconfig.tmp && mv Kconfig.tmp ./Kconfig
-  sed -i 's/selinuxfs.o //g' "./selinux/Makefile"
-  sed -i 's/hooks.o //g' "./selinux/Makefile"
-  cat "./baseband-guard/sepatch.txt" >> "./selinux/Makefile"
-  cd ../../
+  cd ./common
+  curl -sSL https://github.com/cctv18/Baseband-guard/raw/master/setup.sh | bash
+  sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
+  cd ..
 fi
 
 # ===== 禁用 defconfig 检查 =====
@@ -525,7 +504,7 @@ OUT_DIR="$WORKDIR/kernel_workspace/common/out/arch/arm64/boot"
 if [[ "$USE_PATCH_LINUX" == [bB] && $KSU_BRANCH == [yYrR] ]]; then
   echo ">>> 使用 patch_linux 工具处理输出..."
   cd "$OUT_DIR"
-  wget https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/download/0.12.2/patch_linux
+  wget https://github.com/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/latest/download/patch_linux
   chmod +x patch_linux
   ./patch_linux
   rm -f Image
